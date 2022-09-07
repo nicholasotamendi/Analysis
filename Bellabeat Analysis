@@ -1,0 +1,492 @@
+activities <- read_csv("dailyActivity_merged.csv")
+calories <- read_csv("hourlyCalories_merged.csv")
+intensities <- read_csv("hourlyIntensities_merged.csv")
+sleep <- read_csv("sleepDay_merged.csv")
+weight <- read_csv("weightLogInfo_merged.csv")
+
+head(activities)
+head(calories)
+head(intensities)
+head(sleep)
+head(weight)
+
+# To ensure consistency, I ensured to check the ID to ensure they
+# equal to 10 
+id_len_activities <- nchar(activities$Id)
+sum(id_len_activities != 10)
+
+id_len_calories <- nchar(calories$Id)
+sum(id_len_calories != 10)
+
+id_len_intensities <- nchar(intensities$Id)
+sum(id_len_intensities != 10)
+
+id_len_sleep <- nchar(sleep$Id)
+sum(id_len_sleep != 10)
+
+id_len_weight <- nchar(weight$Id)
+sum(id_len_weight != 10)
+
+# Next, I check for duplicated data
+head(duplicated(activities))
+activities[duplicated(activities), ]
+
+head(duplicated(calories))
+calories[duplicated(calories),]
+
+head(duplicated(intensities))
+intensities[duplicated(intensities),]
+
+head(duplicated(sleep))
+sleep[duplicated(sleep), ]
+#sleep has  3 repeated rows, thus 
+sleep <- sleep[!duplicated(sleep), ]
+sleep
+
+head(duplicated(weight))
+weight[duplicated(weight), ]
+
+#Next, I sought to standardize the time format 
+# The calories and intensities data frames had date and time in 24hr
+# format, so this will be divided into 2 variables and the date will 
+# be stored in international format(Y-m-d), and the time in 24hr format
+
+calories$date <- format(as.POSIXct(calories$ActivityHour, format = "%m/%d/%Y %I:%M:%S %p"), "%Y:%m:%d")
+calories$date <- as.Date(calories$date , format = "%Y:%m:%d")
+calories$date
+
+calories$time <- format(as.POSIXct(calories$ActivityHour, format = "%m/%d/%Y %I:%M:%S %p"), "%H:%M:%S")
+calories$time
+
+intensities$date <- format(as.POSIXct(intensities$ActivityHour, format = "%m/%d/%Y %I:%M:%S %p"), "%Y:%m:%d")
+intensities$date <- as.Date(intensities$date, format = "%Y:%m:%d")
+intensities$date
+
+intensities$time <- format(as.POSIXct(intensities$ActivityHour, format = "%m/%d/%Y %I:%M:%S %p"), "%H:%M:%S")
+intensities$time
+
+# The same was done for the all round to ensure standardization and consistency
+weight$date <- format(as.POSIXct(weight$Date, format = "%m/%d/%Y %I:%M:%S %p"), "%Y:%m:%d")
+weight$date <- as.Date(weight$date, format = "%Y:%m:%d")
+weight$date
+
+weight$time <- format(as.POSIXct(weight$Date, format = "%m/%d/%Y %I:%M:%S %p"), "%H:%M:%S")
+weight$time
+
+activities$date <- format(as.POSIXct(activities$ActivityDate, format ="%m/%d/%Y"), "%Y:%m:%d")
+activities$date <- as.Date(activities$date, format = "%Y:%m:%d")
+
+sleep$date <- format(as.POSIXct(sleep$SleepDay, format ="%m/%d/%Y %I:%M:%S %p"), "%Y:%m:%d")
+sleep$date <- as.Date(sleep$date, format = "%Y:%m:%d")
+
+#The first analysis is done on the daily step 
+#Since there is no metadata to confirm if the distance in the daily activity table
+#is measured in km or miles. However, the average height in EEUU is 5ft9in,
+#and the corresponding step length to that height is roughly 28in, which
+#is 71cm. Therefore, we can use the steps of a row to calculate the corresponding distance
+#in km and miles and verify which of the 2 values is closer to the one 
+#shown in the data set
+
+#to get this we use data from the "dailySteps_merged" data frame
+#the first row shows 13162 steps and a distance of 8.5, with a step distnce of 71cm, 
+#the distance traveled in km is around
+13162 * 0.71 / 1000
+# which equals 9.34502
+#while the distance in miles is around:
+13162 * 28 / 63360
+#which equals 5.81654
+#this means that the calculation in km is closer to the result than that in miles so we assume the distances were calculated in km
+
+#I proceed to calculate the number of steps 
+nrow(activities[activities$TotalSteps == 0, ])
+#The code above shows that there's 77 rows that showed 0 total steps. This is odd because barring special circumstances, 
+#it's highly unlikely that the participants spent a day without taking a single step.
+#The probable explanation will be that they might not be wearing their smart device, or that the device ran out of battery
+#Upon looking at the number of calories among the participants with 0 steps were almost the same
+#Consequently, these records will be deleted 
+
+activities <- activities[activities$TotalSteps != 0, ]
+
+#I proceed to check the daily energy expenditure. The total daily energy expenditure is dependent on 
+# several factors like weight, sex, age, height, and activity. This information wasn't provided though
+#if it was given, it would have enabled me calculate the the rough estimate of the total daily expenditure 
+#I need to figure out the participants minimum daily energy expenditure without any activity to identify those records that are erroneous if they fall below the threshold 
+#falling below the threshold could again be caused by the battery of the device running down 
+#I tackled this by first identifying the lightest participant(52.6kg), and calculated his/her energy expenditure with 0 activity 
+#which should amount to 1000 calories. Then, I deleted the records below 1000 calories 
+
+nrow(activities[activities$Calories < 1000, ])
+
+activities[activities$Calories < 1000, ]
+# i  will proceed to delete these part of the data frame as they fall below the minimum threshold 
+
+activities <- subset(activities, Calories > 1000)
+activities
+
+# I Proceed to exploring the data 
+#Number of participants 
+ n_distinct(activities$Id)
+ n_distinct(calories$Id)
+ n_distinct(intensities$Id)
+ n_distinct(sleep$Id)
+ n_distinct(weight$Id)
+ 
+ #Contrary to the initial statement that there were 30 participants, the activity, 
+ #calories and intensities data sets have 33 participants
+ #sleep data set has 24 participants 
+ #weight data set has 8 participants which is too low, and any result obtained from here would be trivial
+ #Thus, I would not be exploring the weight data set any further 
+ 
+ 
+ #I performed summary statistics 
+ #this enabled me become more familiar with the data frame 
+ 
+ activities %>% 
+   select(TotalSteps,
+          TotalDistance,
+          SedentaryMinutes, 
+          Calories,
+          VeryActiveMinutes,
+          FairlyActiveMinutes,
+          LightlyActiveMinutes) %>% 
+   summary()
+
+ 
+ calories %>% 
+   select(Calories) %>% 
+   summary()
+ 
+ intensities %>% 
+   select(TotalIntensity, 
+          AverageIntensity) %>% 
+   summary()
+ 
+ sleep %>% 
+   select(TotalMinutesAsleep,
+          TotalTimeInBed) %>% 
+   summary()
+
+weight %>% 
+  select(WeightKg,
+         Fat,
+         BMI) %>% 
+  summary()
+
+#Some insights: Even after deleting the records with 0 steps, the data still shows days with very little steps and total distance
+#In average, participants walk over 8000 steps a day, even though it is widely recommended to walk 10000 steps
+# (https://www.cdc.gov/media/releases/2020/p0324-daily-step-count.html#:~:text=They%20found%20that%2C%20compared%20with,compared%20with%20taking%204%2C000%20steps.) 
+#The CDC study found out that taking 8000 steps per day is associated with a 51% lower risk of death in comparison to taking 4000 steps per day
+#The mean of sedentary minutes is 960, which equals 16 hours. This may seem like alot, but considering participants that sleep for 8 hours and have a desk job of 8 hours, it seems more reasonable 
+#this indicates that most participants are quite active in a short amount of time per day, while they are over three hours lightly active 
+#Most participants burn less than 100 calories per hour, then the mean increases due to some very high records 
+#Intensity is generally low, although there are some very high records
+#The average sleep time is 419.5, almost 7 hours which corroborates my assumption above 
+#The average total time in bed is slightly higher by about 36 minutes 
+
+
+
+#Visualizing the data 
+# Visualizing the Number of steps and calories burnt
+
+#The summary showed that the average steps the participants took per day is 8359
+# I will like to explore if the steps change along the day of the weeks
+
+activities$week_day <- weekdays(activities$date)
+activities_by_day <- aggregate(activities$TotalSteps, list(activities$week_day), mean)
+
+activities$week_day
+activities_by_day
+
+#plot 
+ggplot(activities_by_day) + geom_bar(aes(x = Group.1, y = x),stat = "identity", color = "black", fill = "pink") + 
+  scale_x_discrete(limits = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")) +
+  labs(title = "Number of steps vs day of the week", x = "day of the week", y = "number of steps") +
+  geom_hline(aes(yintercept = 8000), color = "blue", linetype = "dashed", size = 1)
+
+#The plot above shows that the number of steps is very similar along the week 
+#Tuesday and Saturdays seem to be the days people walk the most 
+#Friday and Saturday seems to be the days people walk the least
+
+
+#We can assume that the number of calories burnt is also similar along the week
+#to confirm this, I'll plot calories burnt against day of the week 
+
+calories_by_day <- aggregate(activities$Calories, list(activities$week_day), mean)
+calories_by_day
+
+#plot 
+ggplot(calories_by_day, aes(x = Group.1, y=x)) + 
+  geom_bar(stat = "identity", color = "black", fill = "pink") +
+  scale_x_discrete(limits = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")) +
+  labs(title = "Calories burnt vs day of the week", x = "day of the week", y = "calories burnt")+
+  geom_hline(aes(yintercept = 2300), color ="blue", linetype = "dashed", size = 1)
+
+#As expected, the calories burnt stay pretty much the same
+#Tuesday and Saturday once again have a slightly higher calorie burn rate 
+#while thursday and sunday have a lower calorie burn rate 
+
+
+#A plot to show the relationship between the number of steps and the calories burnt using a scatter plot
+
+lm1 <- lm(formula = activities$TotalSteps~activities$Calories)
+lb1 <- paste("R^2 == ", round(summary(lm1)$r.squared,3))
+lm1 
+lb1
+
+ggplot(activities, aes(x=TotalSteps, y= Calories))+
+  geom_point() +
+  geom_smooth(method = lm) +
+  labs(title = "Number of Steps vs Calories", x = "Number of steps", y = "Calories")+
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  annotate("text", x = 32500, y = 3500, label = lb1, parse = TRUE)
+
+#There's a strong relationship between number of steps and calories burnt per day as expected
+#This plot is also supported by the pearson correlation test 
+
+
+cor.test(activities$TotalSteps, activities$Calories, method = "pearson")
+
+#Visualizing Intensities data frame 
+# To define how the participant's intensity level changes as the day progresses, I created a graph of average intensity at each hour of the day 
+
+avg_intensity_per_hour <- aggregate(intensities$TotalIntensity, list(intensities$time), mean)
+avg_intensity_per_hour
+
+ggplot(avg_intensity_per_hour, aes(x = Group.1, y = x))+
+  geom_histogram(stat = "identity", color = "black", fill = "pink", labels = T)+
+  theme(axis.text.x = element_text(angle = 90))+
+  labs(title = "Average intensity by hour", x = "hourly_time", y = "Avergae Intensity")
+
+#This shows that the average intensity changes as the day progresses, with intensity lower in the night mostly between 12am and 4am 
+#and highest between 5pm and 7pm
+
+#Plotting the number of calories burnt per hour to see if it behaves similarly
+
+avg_calories_per_hour <- aggregate(calories$Calories, list(calories$time), mean)
+avg_calories_per_hour
+
+ggplot(avg_calories_per_hour, aes(x = Group.1, y = x))+
+  geom_histogram(stat = "identity", color = "black", fill = "pink", labels = T)+
+  theme(axis.text.x = element_text(angle = 90))+
+  labs(title = "Calories burnt by hour", x = "hourly_time", y = "Calories burnt")
+
+
+#This plot shows that the calories burnt by hour follows the same pattern
+#The participant's burn less calories between 12pm and 4am
+#The participants burn more calories between 5pm and 7pm
+
+
+
+#Visualizing sleep data 
+#I would like to focus on the relationship between time asleep and time in bed
+#Ideally, the time asleep and time in bed should be as close as possible 
+
+lm2 <- lm(formula = sleep$TotalMinutesAsleep~sleep$TotalTimeInBed)
+lm2
+
+lb2 <- paste("R^2 == ", round(summary(lm2)$r.squared,3))
+lb2
+
+ggplot(sleep, aes(x = TotalMinutesAsleep, y = TotalTimeInBed))+
+  geom_point()+
+  geom_smooth(method = lm)+
+  labs(title = "Time asleep vs Time in bed", x = "Minutes asleep", y = "Minutes in Bed")+
+  theme(plot.title = element_text(hjust = 0.5))+
+  geom_abline(intercept = 0, slope = 1, col = "green")+
+  annotate("text", x = 760, y = 640, label = lb2, parse = T)
+
+#Majority of the points fall close to the green line indicating that the time in bed is generally close to the time alseep
+#However, some records do seem to be outliers from the green line, and this may mean that these people had difficulty sleeping or actively evaded sleep while in bed
+#To fuurther accentuate the relationship between time asleep and in bed, I'll create a variable that calculates the percentage time in bed which people were actually sleeping
+
+sleep$actively_sleeping <- (sleep$TotalMinutesAsleep / sleep$TotalTimeInBed) * 100
+sleep$actively_sleeping
+
+#plot
+ggplot(sleep, aes(x = actively_sleeping))+
+  geom_histogram(color = "black", fill = "pink", binwidth = 1)+
+  geom_vline(aes(xintercept = mean(actively_sleeping)), color = "black", linetype = "dashed", size = 1)+
+  labs(title = "Time asleep vs Time in bed", x = "Percentage of time in bed sleeping", y = count)+
+  annotate(geom = "text", x = 80, y=80, label = "mean = 91.65%")
+
+
+#The plot shows that majority of participants spend their time in bed sleeping
+#Majority of the records are above the 90% mark, with the average being 91.66%
+#Notably, there are some records below 70%, in these records, a better sleep hygiene by the participant is advised
+
+#To confirm if these values change as the week progresses
+sleep$week_day <- weekdays(sleep$date)
+sleep$week_day
+
+day_sleep <- aggregate(sleep$actively_sleeping, list(sleep$week_day), mean)
+day_sleep
+
+#plot
+ggplot(day_sleep, aes(x = Group.1, y = x)) +
+  geom_bar(stat = "Identity", color = "black", fill = "pink")+
+  scale_x_discrete(limits = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")) +
+  labs(title = "Percentage of time in bed vs daily sleep", x = "day of the week", y = "Percentage of time asleep")
+
+#This graph shows little or no variation in the days of the week 
+
+#The next plot explores the number of minutes spent in bed not sleeping 
+
+sleep$time_awake <- (sleep$TotalTimeInBed-sleep$TotalMinutesAsleep)
+sleep$time_awake
+ggplot(sleep, aes(x = time_awake)) +
+  geom_histogram(color = "black", fill = "pink", binwidth = 5)+
+  geom_vline(aes(xintercept = mean(time_awake)), color = "black", linetype = "dashed", size = 1)+
+  labs(title = "Time in bed awake", x = "Time in bed awake", y = "count")+
+  annotate(geom = "text", x = 150, y = 50, label = "mean =39.3 minutes", size = 4)
+
+
+#This plot shows that most participants spend less than 40 minutes awake in bed.
+#Notably, there are few outliers with very high records well above 100 and 200
+
+#To get the distribution per day of the week 
+time_awake_by_day <- aggregate(sleep$time_awake, list(sleep$week_day), mean)
+time_awake_by_day
+
+ggplot(time_awake_by_day, aes(x = Group.1, y = x))+
+  geom_bar(stat = "identity", color = "black", fill = "pink")+
+  scale_x_discrete(limits = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"))+
+  labs(title = "Time in bed not sleeping by day of the week", x = "day of the week", y = "Time not sleeping")
+
+#There is a variation per day of the week, as values are similar between monday through saturday, differing less than 10 minutes
+#But sunday has shoots just over the 50 minutes mark registering the most time people spend not sleeping in bed 
+#Perhaps people do not have issues falling asleep on sundays but that they spend more more time in bed before getting up
+
+
+#visualizing Activities and Time asleep 
+#I intend to look at the relationship between number of steps and time asleep
+#Normally, the resting time needs to be higher when there's been a strong physical demand 
+#Therefore, one would expect the time asleep to be higher when the number pf steps or the calories burnt is higher 
+
+#we can check this with a scatter plot
+#First, we need to merge the activities and sleep data sets with inner join, as there's some missing data in the sleep data frame 
+
+activities_sleep <- merge(activities, sleep, by = c("Id", "date"))
+
+lm3 <- lm(formula = activities_sleep$TotalSteps ~ activities_sleep$TotalMinutesAsleep)
+lm3
+lb3 <- paste("R^2 ==", round(summary(lm3)$r.squared, 3))
+lb3
+
+#plot
+ggplot(activities_sleep, aes(x = TotalSteps, y = TotalMinutesAsleep))+
+  geom_point()+
+  geom_smooth(method = lm)+
+  labs(title = "Number of steps vs Time asleep", x = "number of steps", y = "time asleep")+
+  theme(plot.title = element_text(hjust = 0.5))+
+  annotate("text", x = 20000, y = 700, label = lb3, parse = T)
+
+#This plot shows that the relationship between both variables is weak and tending to the opposite direction of what I was expecting 
+#people seem to spend less time asleep even when the number of steps is high 
+#to confirm using a pearson correlation test
+
+cor.test(activities_sleep$TotalSteps, activities_sleep$TotalMinutesAsleep, method = "pearson")
+#The correlation test shows a negative relationship
+
+
+#Let's plot calories burnt instead of number of steps
+lm4 <- lm(formula = activities_sleep$Calories ~ activities_sleep$TotalMinutesAsleep)
+lm4
+lb4 <- paste("R^2 ==", round(summary(lm4)$r.squared, 3))
+lb4
+
+ggplot(activities_sleep, aes(x = Calories, y = TotalMinutesAsleep))+
+  geom_point()+
+  geom_smooth(method = lm)+
+  labs(title = "Number of steps vs Time asleep", x = "calories burnt", y = "time asleep")+
+  theme(plot.title = element_text(hjust = 0.5))+
+  annotate("text", x = 4500, y = 700, label = lb4, parse = T)
+
+#This plot shows little relationship between both variables, with an R^2 very close to 0
+
+#Finally, I'll examine the relationship between time asleep and average daily intensity
+
+daily_intensity <- aggregate(TotalIntensity ~ Id + date, intensities, mean)
+daily_intensity
+
+daily_intensity$date <- as.Date(daily_intensity$date, format = "%Y:%m:%d")
+intensities_sleep <- merge(daily_intensity, sleep, by = c("Id", "date"))
+
+
+lm5 <- lm(formula = intensities_sleep$TotalIntensity ~ intensities_sleep$TotalMinutesAsleep)
+lb5 <- paste("R^2 == ", round(summary(lm5)$r.squared,3))
+
+ggplot(intensities_sleep, aes(x = TotalIntensity, y = TotalMinutesAsleep))+
+  geom_point()+
+  geom_smooth(method = lm)+
+  labs(title = "Total intensity vs Time asleep", x = "Total Intensity", y = "Time asleep")+
+  theme(plot.title = element_text(hjust = 0.5))+
+  annotate("text", x = 35, y = 700, label = lb5, parse = T)
+
+
+
+#This plot shows again that the relation between these 2 variables is very week and the regression line shows a negative relationship
+#The opposite of what we're expecting 
+
+cor.test(intensities_sleep$TotalIntensity, intensities_sleep$TotalMinutesAsleep, method = "pearson")
+#The correlation test above proves this 
+
+#Level of Activity
+#I want t0 examine what amount of time the participants spent in each level of activity
+#To do this, I'll create a data frame containing the sum of all records in each level of activity from the activities data frame
+
+activities <- activities %>% 
+  adorn_totals("row")
+activities["859",]
+
+Activity <- c("VeryActive", "FairlyActive", "LightlyActive", "Sedentary")
+Minutes <- c(1411.57, 12737, 181076, 824451)
+Hours <- Minutes / 60
+total_activity <- data.frame(Activity, Minutes, Hours)
+print(total_activity)
+
+
+ggplot(total_activity, aes(x = Activity, y = Hours))+
+  geom_histogram(stat = "identity", color = "black", fill = "pink")+
+  theme(axis.text = element_text(angle = 90))+
+  scale_x_discrete(limits = c("VeryActive", "FairlyActive", "LightlyActive", "Sedentary"))+
+  labs(title = "Time spent per activity level", x = "activity level", y = "hours")
+
+
+#This bar plot shows the vast majority of the time was associated to sedentary activity
+#Even though this seems reasonable, as regular people can't endure high levels of activity for a long period of time
+#reducing the amount of time in the sedentary category would be recommended 
+
+
+#CONCLUSIONS
+#Calories 
+#The number of calories was similar along the week
+#Inculcating hobbies with a little more physicality would help people burn more calories
+#Calories can also be increased by increasing the number of steps walked 
+
+#SLEEP
+#participants barely slept the required 8 hours, Several actions can be taken to remedy this 
+#Implement proper sleep hygiene to decrease the time spent in bed without sleeping
+#Decrease sedentary time, as this would help boost health generally and also improve sleep quality 
+#Participants need to improve the time asleep especially for days with higher activity levels, as the plots show little or no relation between them
+
+
+#ACTIVITY
+#The most common activity level was sedentary, Light jogging or walking would help increase the participant's activity level, the number of calories and the steps taken
+
+#RECOMMENDATIONS 
+#1. Display encouragements to be active during long periods of sedentary activity 
+#Display encouragements to be active during long periods of sedentary activity.
+
+#Including short walks in participants’ daily routines could be a great way to reduce their sedentariness, which could in turn also improve their sleep.
+
+#Market the Bellabeat Leaf as a comfortable and fashionable complement.
+
+#To track their lifestyle and progress, it is key that customers regularly wear their smart device. If they are only wearing it when doing a sport and not when sleeping or working, the data will be biased and not useful to draw proper recommendations.
+
+#Display sleep recommendations based on that day activity level.
+
+#Based on participants’ sleep time goal, the smart device can display a recommendation to sleep more those days that the participant has been more active.
+
+#Encourage weight measurement as a tool to track progress.
+
+#It is important to see weight as a metric and not as a representation of our value as humans. Out of the 33 participants included in this data set, only 8 recorded their weight, meaning that most participants were either not weighting themselves or not tracking their weight. Whether they want to lose, gain or maintain their weight, it is crucial that they regularly track it to know if the measures they are taking are having the impact they are looking for.
